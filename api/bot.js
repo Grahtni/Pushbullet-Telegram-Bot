@@ -372,4 +372,4 @@ bot.catch((err) => {
 
 // Run
 
-bot.start();
+export default webhookCallback(bot, "http");
