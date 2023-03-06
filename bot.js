@@ -67,7 +67,7 @@ bot.command("push", async (ctx) => {
 
     // Logic
     if (!ctx.config.isDeveloper) {
-      await ctx.reply("Apologies! This bot isn't open to users yet.*", {
+      await ctx.reply("*Apologies! This bot isn't open to users yet.*", {
         reply_to_message_id: ctx.message.message_id,
         parse_mode: "Markdown",
       });
@@ -230,7 +230,7 @@ bot.on("message", async (ctx) => {
 
   // Logic
   if (!ctx.config.isDeveloper) {
-    await ctx.reply("Apologies! This bot isn't open to users yet.*", {
+    await ctx.reply("*Apologies! This bot isn't open to users yet.*", {
       reply_to_message_id: ctx.message.message_id,
       parse_mode: "Markdown",
     });
