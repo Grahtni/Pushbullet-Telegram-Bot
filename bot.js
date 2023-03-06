@@ -28,7 +28,7 @@ bot.command("start", async (ctx) => {
   if (ctx.chat.type === "private") {
     await ctx
       .reply(
-        "*Welcome!* ✨\n_Send a message to push to Pushbullet._\n\n*Here's how to push with a title:*\n_Use /push in the following format:\n/push <title> <message>_",
+        "*Welcome!* ✨\n_Send a message to push to Pushbullet._\n\n*Here's how to push with a title:*\n_Use /push in the following format:\n/push (title) <message>_",
         {
           parse_mode: "Markdown",
         }
@@ -73,89 +73,110 @@ bot.command("push", async (ctx) => {
       });
     } else {
       try {
-        const statusMessage = await ctx.reply(`*Pushing*`, {
-          parse_mode: "Markdown",
-        });
-        async function deleteMessageWithDelay(fromId, messageId, delayMs) {
-          return new Promise((resolve, reject) => {
-            setTimeout(() => {
-              bot.api
-                .deleteMessage(fromId, messageId)
-                .then(() => resolve())
-                .catch((error) => reject(error));
-            }, delayMs);
+        const pattern = /^\/push\s*\(.+\)\s*.+$/;
+        const isFormatCorrect = pattern.test(ctx.message.text);
+        if (!isFormatCorrect) {
+          await ctx.reply(
+            "<b>Incorrect format.</b>\n<i>Make sure it's in the format:</i>\n<code>/push (title) message</code>",
+            { parse_mode: "HTML" }
+          );
+        } else {
+          const statusMessage = await ctx.reply(`*Pushing*`, {
+            parse_mode: "Markdown",
           });
-        }
-        await deleteMessageWithDelay(
-          ctx.chat.id,
-          statusMessage.message_id,
-          3000
-        );
-        await Promise.race([
-          new Promise((_, reject) =>
-            setTimeout(
-              () => reject(new Error("Function execution timed out.")),
-              7000
-            )
-          ),
-          new Promise(async (resolve) => {
-            async function sendPushbulletMessage() {
-              return new Promise((resolve, reject) => {
-                const options = {
-                  hostname: "api.pushbullet.com",
-                  port: 443,
-                  path: "/v2/pushes",
-                  method: "POST",
-                  headers: {
-                    "Access-Token": accessToken,
-                    "Content-Type": "application/json",
-                  },
-                };
-                const data = JSON.stringify({
-                  type: "note",
-                  title: "Message from Telegram",
-                  body: ctx.message.text,
-                });
+          async function deleteMessageWithDelay(fromId, messageId, delayMs) {
+            return new Promise((resolve, reject) => {
+              setTimeout(() => {
+                bot.api
+                  .deleteMessage(fromId, messageId)
+                  .then(() => resolve())
+                  .catch((error) => reject(error));
+              }, delayMs);
+            });
+          }
+          await deleteMessageWithDelay(
+            ctx.chat.id,
+            statusMessage.message_id,
+            3000
+          );
+          const inputString = ctx.message.text;
+          const pushIndex = inputString.indexOf("/push");
+          const titleStartIndex = inputString.indexOf("(", pushIndex) + 1;
+          const titleEndIndex = inputString.indexOf(")", titleStartIndex);
+          const title = inputString.slice(titleStartIndex, titleEndIndex);
+          const messageStartIndex = inputString.indexOf(" ", titleEndIndex + 1);
+          const message = inputString.slice(messageStartIndex);
+          await Promise.race([
+            new Promise((_, reject) =>
+              setTimeout(
+                () => reject(new Error("Function execution timed out.")),
+                7000
+              )
+            ),
+            new Promise(async (resolve) => {
+              async function sendPushbulletMessage() {
+                return new Promise((resolve, reject) => {
+                  const options = {
+                    hostname: "api.pushbullet.com",
+                    port: 443,
+                    path: "/v2/pushes",
+                    method: "POST",
+                    headers: {
+                      "Access-Token": accessToken,
+                      "Content-Type": "application/json",
+                    },
+                  };
+                  const data = JSON.stringify({
+                    type: "note",
+                    title: title,
+                    body: message,
+                  });
 
-                const req = https.request(options, (res) => {
-                  let body = "";
-                  res.on("data", (chunk) => {
-                    body += chunk;
+                  const req = https.request(options, (res) => {
+                    let body = "";
+                    res.on("data", (chunk) => {
+                      body += chunk;
+                    });
+                    res.on("end", () => {
+                      resolve(JSON.parse(body));
+                    });
                   });
-                  res.on("end", () => {
-                    resolve(JSON.parse(body));
-                  });
-                });
 
-                req.on("error", (error) => {
-                  reject(error);
-                });
+                  req.on("error", (error) => {
+                    reject(error);
+                  });
 
-                req.write(data);
-                req.end();
-              });
-            }
-            (async () => {
-              try {
-                const response = await sendPushbulletMessage();
-                if (response.active) {
-                  await ctx.reply("*Message pushed successfully!*", {
-                    parse_mode: "Markdown",
-                  });
-                } else {
-                  await ctx.reply("*Push unsuccessful. There was an error.*", {
-                    parse_mode: "Markdown",
-                  });
-                }
-              } catch (error) {
-                console.error(error);
+                  req.write(data);
+                  req.end();
+                });
               }
-            })().then(() =>
-              console.log(`Function executed successfully from ${ctx.chat.id}`)
-            );
-            resolve();
-          }),
-        ]);
+              (async () => {
+                try {
+                  const response = await sendPushbulletMessage();
+                  if (response.active) {
+                    await ctx.reply("*Message pushed successfully!*", {
+                      parse_mode: "Markdown",
+                    });
+                  } else {
+                    await ctx.reply(
+                      "*Push unsuccessful. There was an error.*",
+                      {
+                        parse_mode: "Markdown",
+                      }
+                    );
+                  }
+                } catch (error) {
+                  console.error(error);
+                }
+              })().then(() =>
+                console.log(
+                  `Function executed successfully from ${ctx.chat.id}`
+                )
+              );
+              resolve();
+            }),
+          ]);
+        }
       } catch (error) {
         if (error instanceof GrammyError) {
           if (
